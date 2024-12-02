@@ -9,6 +9,7 @@ import mysql.connector
 from mysql.connector import Error
 from PIL import Image
 import subprocess
+import threading
 
 
 # Tkinter window creation
@@ -123,11 +124,14 @@ def connect_to_sql(output_box, status_label):
         status_label.config(text="SQL kapcsolat sikertelen", fg="red")
         root.db_connected = False  # Kapcsolat sikertelen, állítsuk false-ra
 
+# Add a label for showing the loading status
+loading_status_label = tk.Label(root, text="Ready", fg="black", font=("Helvetica", 12), bg="#f0f0f0")
+loading_status_label.grid(row=3, column=0, padx=10, pady=10)  # Place it next to the button
+
 # Add a new Text widget below the "Download Database" button to display query results
 query_output_box = tk.Text(root, wrap=tk.WORD, height=10, width=80, bg="white", fg=text_color, font=("Arial", 12))
 query_output_box.grid(row=4, column=0, columnspan=2, pady=20)
 
-# Execute SQL query for each barcode
 def execute_sql_query():
     if not root.db_connected:
         messagebox.showwarning("Hiba", "Nincs kapcsolat az adatbázissal!")
@@ -138,6 +142,9 @@ def execute_sql_query():
         if not hasattr(root, 'item_barcodes') or len(root.item_barcodes) == 0:
             messagebox.showwarning("Warning", "No item barcodes loaded from Excel file!")
             return
+
+        # Set the loading text
+        loading_status_label.config(text="Loading...", fg="orange")
 
         # Open the SQL connection
         connection = mysql.connector.connect(
@@ -152,17 +159,28 @@ def execute_sql_query():
         # Clear the query_output_box before inserting new results
         query_output_box.delete(1.0, tk.END)
 
+        # Columns you want to fetch, wrapped in backticks for columns with spaces
+        selected_columns = [
+            "`ID`", "`Client Id`", "`Warehouse Id`", "`Order Number`", "`Total Weight`", 
+            "`Order Value`", "`Tracking Number`", "`Client Short Name`", "`Client Name`", 
+            "`Client Code`", "`Order Status Name`"
+        ]
+
         # Iterate through all item barcodes
         for barcode_to_search in root.item_barcodes:
-            # Execute the SELECT query to search for the barcode
-            cursor.execute(f"SELECT * FROM `_Orders-FinalView-v02_sync` WHERE `Tracking Number` = '{barcode_to_search}'")
+            # Execute the SELECT query to search for the barcode and only fetch the selected columns
+            cursor.execute(f"""
+                SELECT {', '.join(selected_columns)} 
+                FROM `_Orders-FinalView-v02_sync` 
+                WHERE `Tracking Number` = '{barcode_to_search}'
+            """)
             rows = cursor.fetchall()
 
             # Display the results in the query_output_box
             if rows:
                 query_output_box.insert(tk.END, f"\nFound data for barcode {barcode_to_search}:\n")
                 for row in rows:
-                    row_dict = dict(zip([column[0] for column in cursor.description], row))  # Create a dictionary from the row
+                    row_dict = dict(zip(selected_columns, row))  # Create a dictionary from the row
                     for column, value in row_dict.items():
                         query_output_box.insert(tk.END, f"{column}: {value}\n")
             else:
@@ -172,23 +190,37 @@ def execute_sql_query():
         cursor.close()
         connection.close()
 
+        # Change the loading status to Ready
+        loading_status_label.config(text="Ready", fg="black")
+
     except mysql.connector.Error as e:
         query_output_box.delete(1.0, tk.END)  # Clear any previous content
         query_output_box.insert(tk.END, f"Hiba történt az SQL lekérdezés futtatása közben: {e}")
         messagebox.showerror("Hiba", f"Hiba történt az SQL lekérdezés futtatása közben: {e}")
 
+        # Close the connection
+        cursor.close()
+        connection.close()
 
+        # Change the loading status to Ready in case of error
+        loading_status_label.config(text="Ready", fg="black")
+
+# Button to execute SQL query in a separate thread
+def execute_sql_query_thread():
+    thread = threading.Thread(target=execute_sql_query)
+    thread.start()
 
 # Button to execute SQL query
-execute_query_button = tk.Button(root, text="Execute SQL Query", command=execute_sql_query, bg=button_color, fg="white", font=("Arial", 12))
+execute_query_button = tk.Button(root, text="Execute SQL Query", command=execute_sql_query_thread, bg=button_color, fg="white", font=("Arial", 12))
 execute_query_button.grid(row=3, column=1, padx=20, pady=10)
 
+# Button for connecting to SQL
+connect_sql_button = tk.Button(root, text="Connect to SQL", command=lambda: connect_to_sql(output_box, connection_status_label), image=connect_sql_icon, compound=tk.LEFT, bg=button_color, fg="white", font=("Arial", 12))
+connect_sql_button.grid(row=0, column=1, padx=20, pady=10)
 
-# Create widgets for buttons and text boxes using grid layout
-open_file_button = tk.Button(root, text="Open File", command=open_file, bg=button_color, fg="white", font=("Arial", 12))
+# Button to open an Excel file
+open_file_button = tk.Button(root, text="Open Excel File", command=open_file, image=open_file_icon, compound=tk.LEFT, bg=button_color, fg="white", font=("Arial", 12))
 open_file_button.grid(row=0, column=0, padx=20, pady=10)
 
-connect_button = tk.Button(root, text="Connect to SQL", image=connect_sql_icon, compound=tk.LEFT, command=lambda: connect_to_sql(output_box, connection_status_label), bg=button_color, fg="white", font=("Arial", 12))
-connect_button.grid(row=0, column=1, padx=20, pady=10)
-
+# Run the Tkinter event loop
 root.mainloop()
