@@ -137,7 +137,6 @@ loading_status_label.grid(row=3, column=0, padx=10, pady=10)  # Place it next to
 query_output_box = tk.Text(root, wrap=tk.WORD, height=10, width=80, bg="white", fg=text_color, font=("Arial", 12))
 query_output_box.grid(row=4, column=0, columnspan=2, pady=20)
 
-# Button to execute SQL query in a separate thread
 def execute_sql_query():
     if not root.db_connected:
         messagebox.showwarning("Hiba", "Nincs kapcsolat az adatbázissal!")
@@ -172,6 +171,9 @@ def execute_sql_query():
             "`Client Code`", "`Order Status Name`"
         ]
 
+        # Dictionary to store query results
+        barcode_data = {}
+
         # Iterate through all item barcodes
         for barcode_to_search in root.item_barcodes:
             # Execute the SELECT query to search for the barcode and only fetch the selected columns
@@ -185,18 +187,39 @@ def execute_sql_query():
             # Display the results in the query_output_box
             if rows:
                 query_output_box.insert(tk.END, f"\nFound data for barcode {barcode_to_search}:\n")
+                # Store the results in the barcode_data dictionary
+                barcode_data[barcode_to_search] = {}
                 for row in rows:
                     row_dict = dict(zip(selected_columns, row))  # Create a dictionary from the row
                     for column, value in row_dict.items():
                         query_output_box.insert(tk.END, f"{column}: {value}\n")
+                        # Add the value to the barcode_data dictionary
+                        barcode_data[barcode_to_search][column] = value
             else:
                 query_output_box.insert(tk.END, f"\nNo data found for barcode {barcode_to_search}.\n")
+                barcode_data[barcode_to_search] = {}
 
         # Close the connection
         cursor.close()
         connection.close()
 
         # Change the loading status to Ready
+        loading_status_label.config(text="Ready", fg="black")
+
+        # Print the dictionary after the query is finished
+        print("Query Results as Dictionary:")
+        print(barcode_data)
+
+    except mysql.connector.Error as e:
+        query_output_box.delete(1.0, tk.END)  # Clear any previous content
+        query_output_box.insert(tk.END, f"Hiba történt az SQL lekérdezés futtatása közben: {e}")
+        messagebox.showerror("Hiba", f"Hiba történt az SQL lekérdezés futtatása közben: {e}")
+
+        # Close the connection
+        cursor.close()
+        connection.close()
+
+        # Change the loading status to Ready in case of error
         loading_status_label.config(text="Ready", fg="black")
 
     except mysql.connector.Error as e:
