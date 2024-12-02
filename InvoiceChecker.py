@@ -1,5 +1,5 @@
 import tkinter as tk
-from tkinter import filedialog, messagebox
+from tkinter import filedialog, messagebox, simpledialog  # Import simpledialog for password input
 from openpyxl import load_workbook
 from PIL import Image, ImageTk  # Import image handling for icons
 import shutil
@@ -10,7 +10,6 @@ from mysql.connector import Error
 from PIL import Image
 import subprocess
 import threading
-
 
 # Tkinter window creation
 root = tk.Tk()
@@ -93,11 +92,17 @@ def open_file():
 
 def connect_to_sql(output_box, status_label):
     try:
+        # Ask the user for the password using a simple dialog
+        password = simpledialog.askstring("Password", "Please enter your SQL password:", show='*')
+        if not password:
+            messagebox.showwarning("Warning", "Password is required to connect.")
+            return
+
         # Kapcsolódás az adatbázishoz
         connection = mysql.connector.connect(
             host="access-sync.cnomqm8qwozn.eu-north-1.rds.amazonaws.com",
             user="Ogden",
-            password="wLzp7ueqgGigbzL",
+            password=password,  # Use the entered password
             database="Access-Info"
         )
 
@@ -125,13 +130,14 @@ def connect_to_sql(output_box, status_label):
         root.db_connected = False  # Kapcsolat sikertelen, állítsuk false-ra
 
 # Add a label for showing the loading status
-loading_status_label = tk.Label(root, text="Ready", fg="black", font=("Helvetica", 12), bg="#f0f0f0")
+loading_status_label = tk.Label(root, text="", fg="black", font=("Helvetica", 12), bg="#f0f0f0")
 loading_status_label.grid(row=3, column=0, padx=10, pady=10)  # Place it next to the button
 
 # Add a new Text widget below the "Download Database" button to display query results
 query_output_box = tk.Text(root, wrap=tk.WORD, height=10, width=80, bg="white", fg=text_color, font=("Arial", 12))
 query_output_box.grid(row=4, column=0, columnspan=2, pady=20)
 
+# Button to execute SQL query in a separate thread
 def execute_sql_query():
     if not root.db_connected:
         messagebox.showwarning("Hiba", "Nincs kapcsolat az adatbázissal!")
