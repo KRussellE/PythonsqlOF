@@ -222,22 +222,51 @@ def execute_sql_query():
         # Change the loading status to Ready in case of error
         loading_status_label.config(text="Ready", fg="black")
 
-    except mysql.connector.Error as e:
-        query_output_box.delete(1.0, tk.END)  # Clear any previous content
-        query_output_box.insert(tk.END, f"Hiba történt az SQL lekérdezés futtatása közben: {e}")
-        messagebox.showerror("Hiba", f"Hiba történt az SQL lekérdezés futtatása közben: {e}")
-
-        # Close the connection
-        cursor.close()
-        connection.close()
-
-        # Change the loading status to Ready in case of error
-        loading_status_label.config(text="Ready", fg="black")
-
 # Button to execute SQL query in a separate thread
 def execute_sql_query_thread():
     thread = threading.Thread(target=execute_sql_query)
     thread.start()
+
+# Function to handle matching of tracking numbers
+def match_tracking_numbers():
+    if not hasattr(root, 'item_barcodes') or len(root.item_barcodes) == 0:
+        messagebox.showwarning("Warning", "No item barcodes loaded from Excel file!")
+        return
+
+    output_box.delete(1.0, tk.END)
+    output_box.insert(tk.END, "Matching Tracking Numbers:\n")
+
+    # Example: Just display matching tracking numbers (you can modify the logic as needed)
+    for barcode in root.item_barcodes:
+        # For demonstration, you can match it with some condition or simply show the barcode
+        # (Replace this with actual matching logic as needed)
+        output_box.insert(tk.END, f"Tracking Number: {barcode}\n")
+
+    # Example of handling the matched result (you can update this logic based on your requirements)
+    output_box.insert(tk.END, "\nMatching complete!")
+
+# Text box for displaying data on the right side of the window
+right_output_box = tk.Text(root, wrap=tk.WORD, height=15, width=40, bg="white", fg=text_color, font=("Arial", 12))
+right_output_box.grid(row=1, column=2, rowspan=4, padx=20, pady=20)  # Right side placement
+
+# Optional: Add a label above the right output box
+right_output_label = tk.Label(root, text="Right Output Box", fg="black", font=("Helvetica", 12), bg="#f0f0f0")
+right_output_label.grid(row=0, column=2, pady=5)
+
+# Now we can use the right_output_box to display data
+def show_data_in_right_box(data):
+    """Function to insert data into the right output box."""
+    right_output_box.delete(1.0, tk.END)  # Clear previous content
+    right_output_box.insert(tk.END, data)  # Insert new data
+
+# Example of how to use it in a function
+def example_function():
+    # Example of displaying some data in the right box
+    show_data_in_right_box("This is some example data displayed on the right side of the window.")
+
+# Add the "Match the Tracking Numbers" button to the GUI
+match_tracking_button = tk.Button(root, text="Match the Tracking Numbers", command=match_tracking_numbers, bg=button_color, fg="white", font=("Arial", 12))
+match_tracking_button.grid(row=5, column=0, columnspan=2, pady=10)
 
 # Button to execute SQL query
 execute_query_button = tk.Button(root, text="Execute SQL Query", command=execute_sql_query_thread, bg=button_color, fg="white", font=("Arial", 12))
