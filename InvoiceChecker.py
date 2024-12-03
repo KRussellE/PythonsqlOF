@@ -138,7 +138,7 @@ def connect_to_sql(output_box, status_label):
 
 # Add a label for showing the loading status
 loading_status_label = tk.Label(root, text="", fg="black", font=("Helvetica", 12), bg="#f0f0f0")
-loading_status_label.grid(row=3, column=0, padx=10, pady=10)  # Place it next to the button
+loading_status_label.grid(row=3, column=0, padx=10, pady=10)  # Placing loading status to the left
 
 # Add a new Text widget below the "Download Database" button to display query results
 query_output_box = tk.Text(root, wrap=tk.WORD, height=10, width=80, bg="white", fg=text_color, font=("Arial", 12))
@@ -146,7 +146,7 @@ query_output_box.grid(row=4, column=0, columnspan=2, pady=20)
 
 # Szövegmező a státusz üzenetekhez
 loading_status_label = tk.Label(root, text="Ready", font=("Arial", 12), fg="green")
-loading_status_label.grid(row=0, column=1, pady=10)
+loading_status_label.grid(row=3, column=0, padx=10, pady=10)  # Placing loading status to the left
 
 # Button to execute SQL query in a separate thread
 def execute_sql_query_thread():
