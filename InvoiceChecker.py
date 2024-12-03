@@ -148,6 +148,22 @@ query_output_box.grid(row=4, column=0, columnspan=2, pady=20)
 loading_status_label = tk.Label(root, text="Ready", font=("Arial", 12), fg="green")
 loading_status_label.grid(row=0, column=1, pady=10)
 
+# Button to execute SQL query in a separate thread
+def execute_sql_query_thread():
+    # Prompt the user for the password if it isn't already provided
+    if not hasattr(root, 'sql_password') or not root.sql_password:
+        password = simpledialog.askstring("Password", "Please enter your SQL password:", show='*')
+        if not password:
+            messagebox.showwarning("Warning", "Password is required to execute the query.")
+            return
+        root.sql_password = password  # Store the password for future use
+    else:
+        password = root.sql_password  # Use the stored password
+
+    thread = threading.Thread(target=run_sql_query, args=(password,))  # Pass the password here as an argument
+    thread.start()
+
+
 def run_sql_query(password):
     # A jelszóval és a barcodes listával kapcsolódunk az SQL adatbázishoz
 
@@ -221,11 +237,6 @@ def run_sql_query(password):
     except pymysql.MySQLError as e:
         loading_status_label.config(text="SQL query failed", fg="red")
         query_output_box.insert(tk.END, f"Error during SQL query: {e}\n")
-
-# Button to execute SQL query in a separate thread
-def execute_sql_query_thread():
-    thread = threading.Thread(target=execute_sql_query)
-    thread.start()
 
 # Function to handle matching of tracking numbers
 def match_tracking_numbers():
