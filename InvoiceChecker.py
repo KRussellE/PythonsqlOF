@@ -237,17 +237,71 @@ def match_tracking_numbers():
         messagebox.showwarning("Warning", "No item barcodes loaded from Excel file!")
         return
 
-    output_box.delete(1.0, tk.END)
-    output_box.insert(tk.END, "Matching Tracking Numbers:\n")
+    # Clear the right output box before displaying new results
+    right_output_box.delete(1.0, tk.END)
+    right_output_box.insert(tk.END, "Matching Tracking Numbers:\n")
 
-    # Example: Just display matching tracking numbers (you can modify the logic as needed)
+    # Dictionary to store the combined data
+    combined_data = {}
+
+    # Iterate through all item barcodes
     for barcode in root.item_barcodes:
-        # For demonstration, you can match it with some condition or simply show the barcode
-        # (Replace this with actual matching logic as needed)
-        output_box.insert(tk.END, f"Tracking Number: {barcode}\n")
+        # Find the matching item from the Excel data
+        matching_item = None
+        for item in root.excel_data:
+            if item['Item Barcode'] == barcode:
+                matching_item = item
+                break
 
-    # Example of handling the matched result (you can update this logic based on your requirements)
-    output_box.insert(tk.END, "\nMatching complete!")
+        if matching_item:
+            # Now query the SQL database for the barcode
+            query = f"""
+            SELECT `ID`, `Client Id`, `Warehouse Id`, `Order Number`, `Total Weight`, `Order Value`,
+            `Tracking Number`, `Client Short Name`, `Client Name`, `Client Code`, `Order Status Name`
+            FROM `_Orders-FinalView-v02_sync`
+            WHERE `Tracking Number` = '{barcode}'
+            """
+            
+            try:
+                # Open the SQL connection again
+                connection = mysql.connector.connect(
+                    host="access-sync.cnomqm8qwozn.eu-north-1.rds.amazonaws.com",
+                    user="Ogden",
+                    password="wLzp7ueqgGigbzL",
+                    database="Access-Info"
+                )
+                cursor = connection.cursor()
+
+                cursor.execute(query)
+                rows = cursor.fetchall()
+
+                if rows:
+                    # We assume only one row for the barcode, we take the first row (if found)
+                    sql_data = dict(zip([column[0] for column in cursor.description], rows[0]))
+
+                    # Combine the Excel data and SQL data into a single dictionary
+                    combined_item = {**matching_item, **sql_data}
+                    combined_data[barcode] = combined_item
+
+                    # Insert combined data into the right output box in dictionary format
+                    right_output_box.insert(tk.END, f"{combined_item}\n\n")
+                else:
+                    # If no data was found in the SQL database for the barcode
+                    right_output_box.insert(tk.END, f"No data found for barcode {barcode} in SQL.\n\n")
+
+                # Close the SQL connection
+                cursor.close()
+                connection.close()
+
+            except mysql.connector.Error as e:
+                right_output_box.insert(tk.END, f"Error querying the database for barcode {barcode}: {e}\n\n")
+
+        else:
+            right_output_box.insert(tk.END, f"No matching Excel data for barcode {barcode}.\n\n")
+
+    # Display completion message
+    right_output_box.insert(tk.END, "\nMatching complete!")
+
 
 # Text box for displaying data on the right side of the window
 right_output_box = tk.Text(root, wrap=tk.WORD, height=15, width=40, bg="white", fg=text_color, font=("Arial", 12))
