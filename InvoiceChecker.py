@@ -141,15 +141,15 @@ def execute_sql_query():
     if not root.db_connected:
         messagebox.showwarning("Hiba", "Nincs kapcsolat az adatbázissal!")
         return
-    
+
     try:
         # Check if we have any barcodes from the Excel file
         if not hasattr(root, 'item_barcodes') or len(root.item_barcodes) == 0:
             messagebox.showwarning("Warning", "No item barcodes loaded from Excel file!")
             return
 
-        # Set the loading text
-        loading_status_label.config(text="Loading...", fg="orange")
+        # Set the initial loading text
+        loading_status_label.config(text="Loading... 0%", fg="orange")
 
         # Open the SQL connection
         connection = mysql.connector.connect(
@@ -174,8 +174,11 @@ def execute_sql_query():
         # Dictionary to store query results
         barcode_data = {}
 
+        # Get the total number of barcodes
+        total_barcodes = len(root.item_barcodes)
+
         # Iterate through all item barcodes
-        for barcode_to_search in root.item_barcodes:
+        for i, barcode_to_search in enumerate(root.item_barcodes):
             # Execute the SELECT query to search for the barcode and only fetch the selected columns
             cursor.execute(f"""
                 SELECT {', '.join(selected_columns)} 
@@ -183,6 +186,11 @@ def execute_sql_query():
                 WHERE `Tracking Number` = '{barcode_to_search}'
             """)
             rows = cursor.fetchall()
+
+            # Update the loading text with the percentage of completion
+            percentage = int(((i + 1) / total_barcodes) * 100)
+            loading_status_label.config(text=f"Loading... {percentage}%", fg="orange")
+            root.update_idletasks()  # This will force the GUI to update the label in real-time
 
             # Display the results in the query_output_box
             if rows:
@@ -198,10 +206,6 @@ def execute_sql_query():
             else:
                 query_output_box.insert(tk.END, f"\nNo data found for barcode {barcode_to_search}.\n")
                 barcode_data[barcode_to_search] = {}
-
-        # Close the connection
-        cursor.close()
-        connection.close()
 
         # Change the loading status to Ready
         loading_status_label.config(text="Ready", fg="black")
