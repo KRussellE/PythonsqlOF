@@ -5,8 +5,8 @@ from PIL import Image, ImageTk  # Import image handling for icons
 import shutil
 import sqlite3
 import os  # For file existence check
-import mysql.connector
-from mysql.connector import Error
+import pymysql
+from pymysql import Error
 from PIL import Image
 import subprocess
 import threading
@@ -99,35 +99,42 @@ def connect_to_sql(output_box, status_label):
             return
 
         # Kapcsolódás az adatbázishoz
-        connection = mysql.connector.connect(
+        connection = pymysql.connect(
             host="access-sync.cnomqm8qwozn.eu-north-1.rds.amazonaws.com",
             user="Ogden",
             password=password,  # Use the entered password
             database="Access-Info"
         )
 
-        if connection.is_connected():
-            cursor = connection.cursor()
-            cursor.execute("SHOW TABLES")
-            tables = cursor.fetchall()
+        # Try to execute a simple query to check if connection is successful
+        cursor = connection.cursor()
+        cursor.execute("SELECT 1")
+        cursor.close()
 
-            # Adatbázis kapcsolat sikeres
-            output_box.insert(tk.END, "\n\nSQL kapcsolat sikeresen létrejött!\n")
-            output_box.insert(tk.END, "Táblák az adatbázisban:\n")
-            for table in tables:
-                output_box.insert(tk.END, f"{table[0]}\n")
+        # If no exception was raised, the connection is successful
+        output_box.insert(tk.END, "\n\nSQL kapcsolat sikeresen létrejött!\n")
 
-            cursor.close()
-            connection.close()
+        # Now check available tables
+        cursor = connection.cursor()
+        cursor.execute("SHOW TABLES")
+        tables = cursor.fetchall()
 
-            # Kapcsolat állapotának frissítése
-            status_label.config(text="Sikeresen csatlakozott az SQL adatbázishoz", fg="green")
-            root.db_connected = True  # Jelzi, hogy az adatbázishoz csatlakoztunk
+        output_box.insert(tk.END, "Táblák az adatbázisban:\n")
+        for table in tables:
+            output_box.insert(tk.END, f"{table[0]}\n")
 
-    except mysql.connector.Error as e:
+        cursor.close()
+        connection.close()
+
+        # Update connection status label
+        status_label.config(text="Sikeresen csatlakozott az SQL adatbázishoz", fg="green")
+        root.db_connected = True  # Set flag to indicate successful connection
+
+    except pymysql.Error as e:
         output_box.insert(tk.END, f"Hiba az SQL kapcsolódás során: {e}\n")
         status_label.config(text="SQL kapcsolat sikertelen", fg="red")
-        root.db_connected = False  # Kapcsolat sikertelen, állítsuk false-ra
+        root.db_connected = False  # Set flag to indicate failed connection
+
 
 # Add a label for showing the loading status
 loading_status_label = tk.Label(root, text="", fg="black", font=("Helvetica", 12), bg="#f0f0f0")
@@ -137,94 +144,83 @@ loading_status_label.grid(row=3, column=0, padx=10, pady=10)  # Place it next to
 query_output_box = tk.Text(root, wrap=tk.WORD, height=10, width=80, bg="white", fg=text_color, font=("Arial", 12))
 query_output_box.grid(row=4, column=0, columnspan=2, pady=20)
 
-def execute_sql_query():
-    if not root.db_connected:
-        messagebox.showwarning("Hiba", "Nincs kapcsolat az adatbázissal!")
+# Szövegmező a státusz üzenetekhez
+loading_status_label = tk.Label(root, text="Ready", font=("Arial", 12), fg="green")
+loading_status_label.grid(row=0, column=1, pady=10)
+
+def run_sql_query(password):
+    # A jelszóval és a barcodes listával kapcsolódunk az SQL adatbázishoz
+
+    # A lekérdezés előtt a státuszt frissítjük
+    loading_status_label.config(text="Executing query... 0%", fg="black")
+    
+    barcodes = root.item_barcodes
+    if not barcodes:
+        loading_status_label.config(text="No barcodes found", fg="red")
+        messagebox.showwarning("Warning", "No barcodes loaded from the Excel file!")
         return
 
     try:
-        # Check if we have any barcodes from the Excel file
-        if not hasattr(root, 'item_barcodes') or len(root.item_barcodes) == 0:
-            messagebox.showwarning("Warning", "No item barcodes loaded from Excel file!")
-            return
-
-        # Set the initial loading text
-        loading_status_label.config(text="Loading... 0%", fg="orange")
-
-        # Open the SQL connection
-        connection = mysql.connector.connect(
+        # SQL kapcsolat létrehozása
+        connection = pymysql.connect(
             host="access-sync.cnomqm8qwozn.eu-north-1.rds.amazonaws.com",
             user="Ogden",
-            password="wLzp7ueqgGigbzL",
+            password=password,
             database="Access-Info"
         )
-
         cursor = connection.cursor()
 
-        # Clear the query_output_box before inserting new results
-        query_output_box.delete(1.0, tk.END)
+        query_output_box.delete(1.0, tk.END)  # Töröljük az előző tartalmat
+        query_output_box.insert(tk.END, "Executing query for the following barcodes:\n")
+        query_output_box.insert(tk.END, "\n".join(barcodes) + "\n\n")
 
-        # Columns you want to fetch, wrapped in backticks for columns with spaces
-        selected_columns = [
-            "`ID`", "`Client Id`", "`Warehouse Id`", "`Order Number`", "`Total Weight`", 
-            "`Order Value`", "`Tracking Number`", "`Client Short Name`", "`Client Name`", 
-            "`Client Code`", "`Order Status Name`"
+        # Az oszlopok, amelyeket szeretnénk kiírni
+        columns_of_interest = [
+            "ID", "Client Id", "Warehouse Id", "Order Number", "External Order Reference",
+            "Order Date", "Despatch Date", "Total Weight", "Tracking Number",
+            "Client Short Name", "Client Name", "Client Code", "Order Status Name",
+            "Warehouse Name", "OrderNumber+ClientId"
         ]
 
-        # Dictionary to store query results
-        barcode_data = {}
+        # SQL lekérdezés végrehajtása minden barcode-ra
+        total_barcodes = len(barcodes)
+        for i, barcode in enumerate(barcodes):
+            query = f"""
+                SELECT 
+                    `ID`, `Client Id`, `Warehouse Id`, `Order Number`, `External Order Reference`,
+                    `Order Date`, `Despatch Date`, `Total Weight`, `Tracking Number`,
+                    `Client Short Name`, `Client Name`, `Client Code`, `Order Status Name`,
+                    `Warehouse Name`, `OrderNumber+ClientId`
+                FROM `_Orders-FinalView-v02_sync`
+                WHERE `Tracking number` = %s
+            """
+            cursor.execute(query, (barcode,))
+            results = cursor.fetchall()
 
-        # Get the total number of barcodes
-        total_barcodes = len(root.item_barcodes)
+            # Frissítjük a státuszt a feldolgozás előrehaladásával
+            progress_percent = int(((i + 1) / total_barcodes) * 100)  # Százalékos előrehaladás
+            loading_status_label.config(text=f"Executing query... {progress_percent}%")
+            loading_status_label.update()  # Frissítjük az UI-t
 
-        # Iterate through all item barcodes
-        for i, barcode_to_search in enumerate(root.item_barcodes):
-            # Execute the SELECT query to search for the barcode and only fetch the selected columns
-            cursor.execute(f"""
-                SELECT {', '.join(selected_columns)} 
-                FROM `_Orders-FinalView-v02_sync` 
-                WHERE `Tracking Number` = '{barcode_to_search}'
-            """)
-            rows = cursor.fetchall()
-
-            # Update the loading text with the percentage of completion
-            percentage = int(((i + 1) / total_barcodes) * 100)
-            loading_status_label.config(text=f"Loading... {percentage}%", fg="orange")
-            root.update_idletasks()  # This will force the GUI to update the label in real-time
-
-            # Display the results in the query_output_box
-            if rows:
-                query_output_box.insert(tk.END, f"\nFound data for barcode {barcode_to_search}:\n")
-                # Store the results in the barcode_data dictionary
-                barcode_data[barcode_to_search] = {}
-                for row in rows:
-                    row_dict = dict(zip(selected_columns, row))  # Create a dictionary from the row
-                    for column, value in row_dict.items():
-                        query_output_box.insert(tk.END, f"{column}: {value}\n")
-                        # Add the value to the barcode_data dictionary
-                        barcode_data[barcode_to_search][column] = value
+            query_output_box.insert(tk.END, f"Executed query for barcode: {barcode}\n")
+            if results:
+                query_output_box.insert(tk.END, f"Results for barcode {barcode}:\n")
+                for result in results:
+                    # Eredmény dictionary-ben történő kiírása
+                    result_dict = {columns_of_interest[i]: result[i] for i in range(len(columns_of_interest))}
+                    query_output_box.insert(tk.END, f"{result_dict}\n")
             else:
-                query_output_box.insert(tk.END, f"\nNo data found for barcode {barcode_to_search}.\n")
-                barcode_data[barcode_to_search] = {}
+                query_output_box.insert(tk.END, f"No results for barcode {barcode}\n")
 
-        # Change the loading status to Ready
-        loading_status_label.config(text="Ready", fg="black")
-
-        # Print the dictionary after the query is finished
-        print("Query Results as Dictionary:")
-        print(barcode_data)
-
-    except mysql.connector.Error as e:
-        query_output_box.delete(1.0, tk.END)  # Clear any previous content
-        query_output_box.insert(tk.END, f"Hiba történt az SQL lekérdezés futtatása közben: {e}")
-        messagebox.showerror("Hiba", f"Hiba történt az SQL lekérdezés futtatása közben: {e}")
-
-        # Close the connection
         cursor.close()
         connection.close()
 
-        # Change the loading status to Ready in case of error
-        loading_status_label.config(text="Ready", fg="black")
+        # Státusz frissítése "Ready"-ra
+        loading_status_label.config(text="Ready", fg="green")
+
+    except pymysql.MySQLError as e:
+        loading_status_label.config(text="SQL query failed", fg="red")
+        query_output_box.insert(tk.END, f"Error during SQL query: {e}\n")
 
 # Button to execute SQL query in a separate thread
 def execute_sql_query_thread():
@@ -264,7 +260,7 @@ def match_tracking_numbers():
             
             try:
                 # Open the SQL connection again
-                connection = mysql.connector.connect(
+                connection = pymysql.connect(
                     host="access-sync.cnomqm8qwozn.eu-north-1.rds.amazonaws.com",
                     user="Ogden",
                     password="wLzp7ueqgGigbzL",
@@ -293,7 +289,7 @@ def match_tracking_numbers():
                 cursor.close()
                 connection.close()
 
-            except mysql.connector.Error as e:
+            except pymysql.Error as e:
                 right_output_box.insert(tk.END, f"Error querying the database for barcode {barcode}: {e}\n\n")
 
         else:
