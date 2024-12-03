@@ -11,6 +11,20 @@ from PIL import Image
 import subprocess
 import threading
 
+import json
+
+# Beolvassuk a konfigurációs fájlt
+with open('config.json') as config_file:
+    config = json.load(config_file)
+
+# Kivesszük a jelszót
+db_password = config.get('db_password')
+
+# Ha nincs jelszó, dobjunk hibát
+if not db_password:
+    raise ValueError("A jelszó nem található a konfigurációs fájlban!")
+
+
 # Tkinter window creation
 root = tk.Tk()
 root.title("File Opener and SQL Connection")
@@ -145,7 +159,7 @@ query_output_box = tk.Text(root, wrap=tk.WORD, height=10, width=80, bg="white", 
 query_output_box.grid(row=4, column=0, columnspan=2, pady=20)
 
 # Szövegmező a státusz üzenetekhez
-loading_status_label = tk.Label(root, text="Ready", font=("Arial", 12), fg="green")
+loading_status_label = tk.Label(root, text="", font=("Arial", 12), fg="green")
 loading_status_label.grid(row=3, column=0, padx=10, pady=10)  # Placing loading status to the left
 
 # Button to execute SQL query in a separate thread
@@ -274,7 +288,7 @@ def match_tracking_numbers():
                 connection = pymysql.connect(
                     host="access-sync.cnomqm8qwozn.eu-north-1.rds.amazonaws.com",
                     user="Ogden",
-                    password="wLzp7ueqgGigbzL",
+                    password=db_password,  # Jelszó a konfigurációs fájlból
                     database="Access-Info"
                 )
                 cursor = connection.cursor()
